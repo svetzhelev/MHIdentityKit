@@ -158,7 +158,7 @@ extension IdentityManager {
      - note: The implementation of this menthod, simple checks if the HTTP response status code is 401 Unauthorized and if so - authorizes the request again by forcing the authentication. Then the request is retried.
      */
     
-    public func perform(_ request: URLRequest, using networkClient: NetworkClient = _defaultNetworkClient, retryAttempts: Int = 1, validator: NetworkResponseValidator? = nil, forceAuthenticate: Bool = false, completion: @escaping (NetworkResponse) -> Void) {
+    public func perform(_ request: URLRequest, using networkClient: NetworkClient = _defaultNetworkClient, retryAttempts: Int = 2, validator: NetworkResponseValidator? = nil, forceAuthenticate: Bool = false, completion: @escaping (NetworkResponse) -> Void) {
         
         self.authorize(request: request, forceAuthenticate: forceAuthenticate) { (request, error) in
             
@@ -173,7 +173,8 @@ extension IdentityManager {
                 let validator = validator ?? self.responseValidator
                 if validator.validate(response) == false && retryAttempts > 0 {
                     
-                    self.perform(request, using: networkClient, retryAttempts: retryAttempts - 1, validator: validator, forceAuthenticate: true, completion: completion)
+                    let shouldForceAuthenticate = !(retryAttempts > 1)  //  First try to refresh the token.
+                    self.perform(request, using: networkClient, retryAttempts: retryAttempts - 1, validator: validator, forceAuthenticate: shouldForceAuthenticate, completion: completion)
                     return
                 }
                 
