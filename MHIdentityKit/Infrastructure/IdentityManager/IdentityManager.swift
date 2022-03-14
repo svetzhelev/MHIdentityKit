@@ -173,7 +173,7 @@ extension IdentityManager {
                 let validator = validator ?? self.responseValidator
                 if validator.validate(response) == false && retryAttempts > 0 {
                     
-                    let shouldForceAuthenticate = !(retryAttempts > 1)  //  First try to refresh the token.
+                    let shouldForceAuthenticate = retryAttempts < 2  //  First try to refresh the token.
                     self.perform(request, using: networkClient, retryAttempts: retryAttempts - 1, validator: validator, forceAuthenticate: shouldForceAuthenticate, completion: completion)
                     return
                 }
