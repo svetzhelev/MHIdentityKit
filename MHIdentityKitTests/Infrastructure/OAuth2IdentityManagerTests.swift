@@ -448,6 +448,60 @@ class OAuth2IdentityManagerTests: XCTestCase {
             })
         }
     }
+    
+    func testRefreshTokenWhenExpiresInNil() {
+        
+        class Flow: AuthorizationGrantFlow {
+            
+            func authenticate(handler: @escaping (AccessTokenResponse?, Error?) -> Void) {
+            
+                handler(AccessTokenResponse(accessToken: "tat1", tokenType: "Bearer", expiresIn: nil, refreshToken: "trt1", scope: nil), nil)
+            }
+        }
+        
+        class Refresher: AccessTokenRefresher {
+            
+            func refresh(using requestModel: AccessTokenRefreshRequest, handler: @escaping (AccessTokenResponse?, Error?) -> Void) {
+                
+                XCTAssertEqual(requestModel.refreshToken, "trt1")
+                handler(AccessTokenResponse(accessToken: "rtat", tokenType: "Bearer", expiresIn: nil, refreshToken: "trt2", scope: nil), nil)
+            }
+        }
+        
+        struct NClient: NetworkClient {
+            
+            var statusCode: Int
+            
+            func perform(_ request: URLRequest, completion: @escaping (NetworkResponse) -> Void) {
+                
+                completion(NetworkResponse(data: nil, response: HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil), error: nil))
+            }
+        }
+        
+        var networkClient = NClient(statusCode: 200)
+        let manager = OAuth2IdentityManager(flow: Flow(), refresher: Refresher(), storage: InMemoryIdentityStorage(), authorizationMethod: .header)
+        
+        AccessTokenResponse.expirationHandler = { response in
+        
+            return response.expiresIn == nil && response.refreshToken != nil && networkClient.statusCode == 401
+        }
+        
+        let request = try! URLRequest(url: URL(string: "http://foo.bar")!).authorized(using: manager)
+        
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer tat1")
+        
+        let secondRequest = try! URLRequest(url: URL(string: "http://foo.bar")!).authorized(using: manager)
+        
+        XCTAssertEqual(secondRequest.value(forHTTPHeaderField: "Authorization"), "Bearer tat1")
+        
+        //  Set the status code to fail
+        networkClient.statusCode = 401
+        manager.perform(URLRequest(url: URL(string: "http://foo.bar")!), using: networkClient, completion: { (response) in
+            
+            XCTAssertNotNil(response)
+            XCTAssertEqual(manager.refreshToken, "trt2")
+        })
+    }
 }
 
 
